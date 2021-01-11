@@ -1,3 +1,9 @@
+// Simplistic hardware snake game using joystick and 8x8 led display
+// by oran collins
+// github.com/wisehackermonkey
+// oranbusiness@gmail.com
+// 20210110
+
 #include <Arduino.h>
 #include "LedControl.h"
 #include "Timer.h"
@@ -27,6 +33,7 @@ int x = 0;
 int y = 0;
 int x_vel = 0;
 int y_vel = 0;
+int score = 0;
 
 //used to blink player for more visalbity
 bool isVisablePlayer = true;
@@ -40,6 +47,7 @@ int y_joystick_raw = 0;
 
 int x_joystick_dir = 0;
 int y_joystick_dir = 0;
+bool joystick_button = false;
 
 //constants
 const int width = 8;
@@ -132,12 +140,34 @@ byte coinScreen[8] = {
   B00000000,
   B00000000
 };
+const byte X_ENDGAME_SCREEN[8] = {
+  B10000001,
+  B01000010,
+  B00100100,
+  B00011000,
+  B00011000,
+  B00100100,
+  B01000010,
+  B10000001
+};
+
+const byte X_ENDGAME_SCREEN_INTERTED[8] = {
+  B01111110,
+  B10111101,
+  B11011011,
+  B11100111,
+  B11100111,
+  B11011011,
+  B10111101,
+  B01111110
+};
 
 
 void ClearScreen(byte []);
 void flashPlayer(int , int , byte []);
 void blinkPoint(int , int );
 void Draw() ;
+void Draw(byte []);
 void EatCoin();
 void StopCoinSpawning();
 void AddCoin();
@@ -150,32 +180,13 @@ void clearCoins();
 void printList(SimpleList<int> );
 void DoNothing();
 void addPoint(int , int , byte []);
-void clearPoint(int _x, int _y, byte Screen[]);
+void clearPoint(int , int , byte []);
 void ReadJoyStick();
-
+void ScreenWrap() ;
+void WallCollision();
 void CalculateJoyStickDirection();
-
-
-//helper function
-void print(String str) {
-  Serial.print(str);
-}
-void print(int str) {
-  Serial.print(str);
-}
-void print(char str) {
-  Serial.print(str);
-}
-void println(String str) {
-  Serial.println(str);
-}
-void println(int str) {
-  Serial.println(str);
-}
-void println(char str) {
-  Serial.println(str);
-}
-
+void FillScreen(byte []);
+void DespawnCoin();
 
 void setup() {
   pinMode(SW_PIN, INPUT);
@@ -191,22 +202,79 @@ void setup() {
 
   moveEvent = t.every(250, MoveCharacter, (void*)2);
   coinEvent = t.every(500, AddCoin, (void*)2);
-  playerBlinkEvent = t.every(100, blinkPoint, (void*)2);
-  stopCoinSpawnEvent = t.after(5000, StopCoinSpawning, (void*)2);
+  playerBlinkEvent = t.every(75, blinkPoint, (void*)2);
+  stopCoinSpawnEvent = t.after(2000, StopCoinSpawning, (void*)2);
 
+  int despawnCoinEvent = t.every(6000, DespawnCoin, (void*)2);
   coins.reserve(300);
 }
 
 void loop() {
   t.update();
-  ReadJoyStick();
-  CalculateJoyStickDirection();
-  EatCoin();
-  DisplayCoins();
-  DisplayCharacter();
-  Draw();
+  if (score <= 5 && coins.size() >= 1) {
+    ReadJoyStick();
+    CalculateJoyStickDirection();
+    EatCoin();
+    DisplayCoins();
+    DisplayCharacter();
+    Draw();
+  } else if(score < 0 && coins.size() == 0){
+    FillScreen(screen);
+    Draw();
+    delay(250);
+
+        ClearScreen(coinScreen);
+    Draw();
+
+    delay(250);
+    Draw(X_ENDGAME_SCREEN);
+     delay(250);
+    Draw(X_ENDGAME_SCREEN_INTERTED);
+    delay(250);
+  }
+
+  if(millis()% (6000*5)){
+    Serial.println("WON GAME!");
+
+  }
+
 }
 
+void FillScreen(byte Screen[]) {
+  for (int i = 0; i < 8; i++) {
+    Screen[i] = B11111111;
+  }
+}
+void WallCollision() {
+
+
+  if (x <= -1) {
+    x = 0;
+  } else if (x > 7) {
+    x = 7;
+  }
+
+  if (y <= -1) {
+    y = 0;
+  } else if (y > 7) {
+    y = 7;
+  }
+}
+
+void ScreenWrap() {
+
+  if (x <= -1) {
+    x = 7;
+  } else if (x > 7) {
+    x = 0;
+  }
+
+  if (y <= -1) {
+    y = 7;
+  } else if (y > 7) {
+    y = 0;
+  }
+}
 void DisplayCharacter() {
   ClearScreen(playerScreen);
   //  addPoint(x, y, playerScreen);
@@ -228,14 +296,15 @@ void ShowCoins() {
 
 void AddCoin() {
   //prevent filling up ram
-  //  if (coins.size() <= COIN_TOTAL) {
+  //  if (coins.size() <= COIN_TOTAL) {}
   int _x = random(0, 8);
   int _y = random(0, 8);
   coins.push_back(width * _y + _x);
-
-  //  }
 }
-
+void DespawnCoin() {
+  coins.pop_front();
+  score--;
+}
 void StopCoinSpawning() {
   t.stop(coinEvent);
 }
@@ -251,7 +320,12 @@ void EatCoin() {
       clearPoint(_y, _x, coinScreen);
       clearPoint(_y, _x, playerScreen);
       itr = coins.erase(itr);
-      //      Draw();
+
+
+      //Progress in game
+      //Register eating a coin as incrementing score
+      score++;
+      Draw();
       continue;
     }
     ++itr;
@@ -261,6 +335,11 @@ void EatCoin() {
 void Draw() {
   for (int i = 0; i < 8; i++) {
     lc.setRow(0, i, screen[i] | playerScreen[i] | coinScreen[i]);
+  }
+}
+void Draw(byte Screen[]) {
+  for (int i = 0; i < 8; i++) {
+    lc.setRow(0, i, Screen[i]);
   }
 }
 
@@ -283,6 +362,8 @@ void ClearScreen(byte grid[]) {
 void MoveCharacter() {
   x += x_joystick_dir;
   y += y_joystick_dir;
+  WallCollision();
+  //ScreenWrap();
 }
 
 
@@ -305,7 +386,7 @@ void printList(SimpleList<int> arr) {
     Serial.print((*itr));
     Serial.print(",");
   }
-  println("");
+  Serial.println("");
 }
 
 
@@ -324,7 +405,9 @@ void clearPoint(int _x, int _y, byte Screen[]) {
 void ReadJoyStick() {
   x_joystick_raw = analogRead(X_PIN);
   y_joystick_raw = analogRead(Y_PIN);
+
 }
+void(* resetFunc) (void) = 0;
 
 void CalculateJoyStickDirection() {
   if ( x_upperbound < x_joystick_raw) {
@@ -341,6 +424,11 @@ void CalculateJoyStickDirection() {
     y_joystick_dir = -1;
   } else {
     y_joystick_dir = 0;
+  }
+
+  if (joystick_button == HIGH) {
+    //todo reset location on button click
+    resetFunc(); 
   }
 }
 
