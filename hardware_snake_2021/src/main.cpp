@@ -151,6 +151,30 @@ const byte X_ENDGAME_SCREEN[8] = {
   B10000001
 };
 
+const byte WIN_SCREEN[8] = {
+  B11111111,
+  B11111111,
+  B11111111,
+  B11111111,
+  B11111111,
+  B11111111,
+  B11111111,
+  B11111111
+};
+const byte WIN_SCREEN_INVERTED[8] = {
+  B00000000,
+  B00000000,
+  B00000000,
+  B00000000,
+  B00000000,
+  B00000000,
+  B00000000,
+  B00000000
+};
+
+
+
+
 const byte X_ENDGAME_SCREEN_INTERTED[8] = {
   B01111110,
   B10111101,
@@ -209,12 +233,31 @@ void setup() {
   coins.reserve(300);
 }
 
+bool check_win = false;
 void loop() {
   t.update();
   if (score <= 5 && coins.size() >= 1) {
     ReadJoyStick();
     CalculateJoyStickDirection();
     EatCoin();
+    if(check_win){
+      if(score == COIN_TOTAL){
+        Serial.println("WIN!");
+
+  delay(250);
+
+        ClearScreen(coinScreen);
+    Draw();
+                
+
+                   delay(250);
+    Draw(WIN_SCREEN);
+     delay(250);
+    Draw(WIN_SCREEN_INVERTED);
+    delay(250);
+
+      }
+    }
     DisplayCoins();
     DisplayCharacter();
     Draw();
@@ -233,10 +276,7 @@ void loop() {
     delay(250);
   }
 
-  if(millis()% (6000*5)){
-    Serial.println("WON GAME!");
 
-  }
 
 }
 
@@ -300,6 +340,7 @@ void AddCoin() {
   int _x = random(0, 8);
   int _y = random(0, 8);
   coins.push_back(width * _y + _x);
+  
 }
 void DespawnCoin() {
   coins.pop_front();
@@ -307,6 +348,7 @@ void DespawnCoin() {
 }
 void StopCoinSpawning() {
   t.stop(coinEvent);
+  check_win = true;
 }
 
 void EatCoin() {
